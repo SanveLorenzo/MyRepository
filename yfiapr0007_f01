@@ -1,0 +1,1589 @@
+*&---------------------------------------------------------------------*
+*&  Include           YFIAPR0007_F01                                   *
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  SELECT_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM select_data .
+
+  CLEAR: it_reguhp[].
+
+* Seleccionar datos cabecera
+  IF zw_laufd IS INITIAL AND zw_laufi IS INITIAL.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE it_reguh
+      FROM reguh INNER JOIN regup
+      ON reguh~laufd = regup~laufd AND
+         reguh~laufi = regup~laufi AND
+         reguh~xvorl = regup~xvorl AND
+         reguh~zbukr = regup~zbukr AND
+         reguh~lifnr = regup~lifnr AND
+         reguh~kunnr = regup~kunnr AND
+         reguh~empfg = regup~empfg AND
+         reguh~vblnr = regup~vblnr
+      WHERE regup~gjahr IN s_gjahr
+        AND regup~bukrs IN s_bukrs
+        AND regup~vblnr IN s_belnr
+        AND reguh~lifnr IN s_lifnr.
+  ELSE.
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE it_reguh
+      FROM reguh INNER JOIN regup
+      ON reguh~laufd = regup~laufd AND
+         reguh~laufi = regup~laufi AND
+         reguh~xvorl = regup~xvorl AND
+         reguh~zbukr = regup~zbukr AND
+         reguh~lifnr = regup~lifnr AND
+         reguh~kunnr = regup~kunnr AND
+         reguh~empfg = regup~empfg AND
+         reguh~vblnr = regup~vblnr
+      WHERE reguh~laufd EQ zw_laufd
+        AND reguh~laufi EQ zw_laufi
+        AND reguh~xvorl EQ space
+        AND regup~gjahr IN s_gjahr
+        AND regup~bukrs IN s_bukrs
+        AND regup~vblnr IN s_belnr
+        AND reguh~lifnr IN s_lifnr.
+  ENDIF.
+
+  IF sy-subrc = 0.
+* Seleccionar datos posición
+    SELECT *
+      INTO CORRESPONDING FIELDS OF TABLE it_regup
+      FROM regup
+      FOR ALL ENTRIES IN it_reguh
+      WHERE laufd EQ it_reguh-laufd
+        AND laufi EQ it_reguh-laufi
+        AND xvorl EQ it_reguh-xvorl
+        AND zbukr EQ it_reguh-zbukr
+        AND lifnr EQ it_reguh-lifnr
+        AND kunnr EQ it_reguh-kunnr
+        AND empfg EQ it_reguh-empfg
+        AND vblnr EQ it_reguh-vblnr.
+  ENDIF.
+
+
+  LOOP AT it_regup. "Datos de posición
+
+    AUTHORITY-CHECK OBJECT 'F_REGU_BUK'
+         ID 'BUKRS' FIELD it_regup-bukrs
+         ID 'FBTCH' DUMMY.
+    IF sy-subrc <> 0.
+      gv_not_authorized = abap_true.
+      MESSAGE i002(co) WITH it_regup-bukrs DISPLAY LIKE 'E'.
+      EXIT.
+    ENDIF.
+
+*   Datos de cabecera
+    READ TABLE it_reguh WITH KEY laufd = it_regup-laufd
+                                 laufi = it_regup-laufi
+                                 xvorl = it_regup-xvorl
+                                 zbukr = it_regup-zbukr
+                                 lifnr = it_regup-lifnr
+                                 kunnr = it_regup-kunnr
+                                 empfg = it_regup-empfg
+                                 vblnr = it_regup-vblnr.
+
+    IF sy-subrc = 0.
+
+      MOVE-CORRESPONDING it_reguh TO it_reguhp.
+*     Completar con datos de posición
+      it_reguhp-bukrs = it_regup-bukrs.
+      it_reguhp-belnr = it_regup-belnr.
+      it_reguhp-gjahr = it_regup-gjahr.
+      it_reguhp-buzei = it_regup-buzei.
+      it_reguhp-bldat = it_regup-bldat.
+      it_reguhp-xblnr = it_regup-xblnr.
+
+      CASE it_regup-shkzg.
+        WHEN 'H'. "Importe Negativo
+          it_reguhp-dmbtr = it_regup-dmbtr * -1.
+          it_reguhp-wrbtr = it_regup-wrbtr * -1.
+          it_reguhp-sknto = it_regup-sknto * -1.
+          it_reguhp-wskto = it_regup-wskto * -1.
+
+        WHEN 'S'. "Importe Positivo
+          it_reguhp-dmbtr = it_regup-dmbtr.
+          it_reguhp-wrbtr = it_regup-wrbtr.
+          it_reguhp-sknto = it_regup-sknto.
+          it_reguhp-wskto = it_regup-wskto.
+
+      ENDCASE.
+
+*     Select Message to vendor.
+      CLEAR it_reguhp-bktxt.
+      SELECT SINGLE bktxt
+        INTO it_reguhp-bktxt
+        FROM bkpf
+        WHERE belnr  = it_regup-belnr
+          AND bukrs  = it_regup-bukrs
+          AND gjahr  = it_regup-gjahr.
+      APPEND it_reguhp.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFORM.                    " SELECT_DATA
+
+*&---------------------------------------------------------------------*
+*&      Form  TRATAR_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM tratar_data.
+
+  LOOP AT it_reguh.
+* Datos de dirección
+    CLEAR: wa_address.
+    READ TABLE it_address
+      WITH KEY vblnr = it_reguh-vblnr TRANSPORTING NO FIELDS.
+
+    IF sy-subrc <> 0.
+
+*     wa_address-lifnr = it_reguh-lifnr.
+*     wa_address-vblnr = it_reguh-vblnr.
+*     wa_address-name1 = it_reguh-name1.
+*     wa_address-stras = it_reguh-stras.
+*     wa_address-pstlz = it_reguh-pstlz.
+*     wa_address-ort01 = it_reguh-ort01.
+*     wa_address-land1 = it_reguh-land1.
+      MOVE-CORRESPONDING it_reguh TO wa_address.
+      APPEND wa_address TO it_address.
+
+    ENDIF.
+
+  ENDLOOP.
+
+* Ordenar la tabla interna por vendedor
+  SORT it_reguhp BY lifnr.
+
+  LOOP AT it_reguhp.
+* Tabla de Vendedores
+    AT NEW vblnr.
+
+      it_vblnr-vblnr = it_reguhp-vblnr.
+
+      APPEND it_vblnr.
+
+    ENDAT.
+
+* Seleccionar formulario a imprimir
+    IF wa_t042e IS INITIAL.
+
+      CLEAR wa_t042e.
+
+      SELECT SINGLE *
+        INTO wa_t042e
+        FROM t042e
+        WHERE zbukr EQ it_reguhp-zbukr
+          AND zlsch EQ it_reguhp-rzawe.
+
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFORM.                    " TRATAR_DATA
+
+*&---------------------------------------------------------------------*
+*&      Form  TRATAR_DATA_EMAIL
+*&---------------------------------------------------------------------*
+*1.	US17 liability on the payment  send remittance advice to US17 contact
+*a.	If the contact exist for that vendor in US17 department and Function 23  Then send e-mail to the contact person
+*b.	If the contact does not exist for that US17 department and/or Function 23  Then send e-mail to AP Department mail address
+*2.	NO US17 liability on the payment
+*a.	Check contact list for that vendor and make sure that exists for any department (company code) on which there is a liability for that payment and the Function is 23
+*i.	If the above is true for different departments (different company codes)  Pick the contact for which the invoice amount is higher
+*ii.  If the above is true for only one department  Pick the contact for that department (Company code)
+*iii.	If the above is NOT true  Send e-mail to AP Department mail address
+*----------------------------------------------------------------------*
+FORM tratar_data_email.
+
+
+
+  DATA:
+    l_has_email TYPE abap_bool,
+    l_tabix     TYPE i,
+    ls_address  TYPE reguh,
+    ls_reguhp   TYPE zfigl0001.
+
+  REFRESH: it_reguhp_email,
+           it_vblnr_email,
+           it_address_email.
+
+  REFRESH: it_provider_email.
+
+  LOOP AT it_reguhp.
+
+    ls_reguhp = it_reguhp.
+
+    AT NEW vblnr.
+
+
+
+      PERFORM check_email USING    ls_reguhp
+                          CHANGING l_has_email
+                                   it_provider_email.
+
+      IF l_has_email IS NOT INITIAL AND p_email IS NOT INITIAL.
+
+        CLEAR: it_vblnr.
+        READ TABLE it_vblnr WITH KEY vblnr = ls_reguhp-vblnr.
+
+        IF sy-subrc = 0.
+
+          l_tabix = sy-tabix.
+          APPEND it_vblnr TO it_vblnr_email.
+          DELETE it_vblnr INDEX l_tabix.
+
+        ENDIF.
+
+        CLEAR: ls_address.
+        READ TABLE it_address WITH KEY lifnr = ls_reguhp-lifnr
+          INTO ls_address.
+
+        IF sy-subrc = 0.
+
+          l_tabix = sy-tabix.
+          APPEND ls_address TO it_address_email.
+          DELETE it_address INDEX l_tabix.
+
+        ENDIF.
+
+      ENDIF.
+
+    ENDAT.
+
+    IF l_has_email IS NOT INITIAL AND p_email IS NOT INITIAL.
+
+      APPEND ls_reguhp TO it_reguhp_email.
+      DELETE it_reguhp.
+
+    ELSEIF p_forda IS INITIAL.
+      DELETE it_reguhp.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  CHECK_EMAIL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_ZBUKR            text
+*      -->P_LIFNR            text
+*      <--P_HAS_EMAIL        text
+*      <--PT_PROVIDER_EMAIL  text
+*----------------------------------------------------------------------*
+FORM check_email USING    p_reguhp TYPE zfigl0001
+                 CHANGING p_has_email
+                          pt_provider_email TYPE yfiap_remitt_adv_mail_tt.
+
+  TYPES:
+    BEGIN OF typ_pernum,
+      namev TYPE  namev_vp,
+      name1 TYPE name1_gp,
+      prsnr TYPE ad_persnum,
+    END OF typ_pernum,
+    tt_pernum TYPE TABLE OF typ_pernum.
+
+  DATA:
+    l_empl_mail       TYPE ad_smtpadr,
+    l_is_valid        TYPE abap_bool,
+    ls_provider_email TYPE yfiap_remitt_adv_mail,
+    l_it_persnum      TYPE tt_pernum,
+    l_st_persnum      TYPE typ_pernum,
+    l_it_smtp_addr    TYPE ytsmtp_addr,
+    l_stmp_addr       TYPE ad_smtpadr,
+    l_lines           TYPE i.
+
+  DATA: BEGIN OF lt_mails_bukrs OCCURS 0,
+          bukrs    TYPE bukrs,
+          lifnr    TYPE lifnr,
+          intad    TYPE intad,
+          dmbtr    TYPE dmbtr,
+          name(60),
+        END OF lt_mails_bukrs.
+  DATA ls_mails_bukrs_only_one LIKE LINE OF lt_mails_bukrs.
+
+
+*  DATA l_empl_mail  TYPE ad_smtpadr.
+*TYPES:
+*  BEGIN OF ty_contact,
+*    namev TYPE namev,
+*    name1 TYPE name1,
+*    prsnr TYPE ad_persnum,
+*  END OF ty_contact,
+*  tt_contact TYPE TABLE OF ty_contact.
+*DATA:
+*  l_it_contact   TYPE tt_contact,
+*  l_st_contact   TYPE ty_contact,
+*  l_lines        TYPE i,
+*  l_it_smtp_addr TYPE ytsmtp_addr,
+*  ls_provider_mail type YFIAP_REMITT_ADV_MAIL.
+*CLEAR: l_lines, gv_mail, gv_name.
+*REFRESH: l_it_contact.
+*break paloja.
+** Only for employes
+*SELECT SINGLE smtp_addr name1 INTO (gv_mail, gv_name)
+*  FROM lfa1 AS l INNER JOIN adr6 AS a
+*    ON l~adrnr EQ a~addrnumber
+*  WHERE lifnr EQ wa_address-lifnr
+*    AND ktokk EQ 'EMPL'.
+*IF sy-subrc <> 0.
+*SELECT namev
+*         name1
+*         prsnr
+*    INTO CORRESPONDING FIELDS OF TABLE l_it_contact
+*    FROM knvk
+*    WHERE abtnr EQ gv_bukrs
+*      AND pafkt EQ '23'
+*      AND lifnr EQ wa_address-lifnr.
+*  SORT l_it_contact.
+*  DELETE ADJACENT DUPLICATES FROM l_it_contact
+*    COMPARING namev
+*              name1.
+*  DESCRIBE TABLE l_it_contact LINES l_lines.
+*      CLEAR: l_st_contact.
+*      READ TABLE l_it_contact INDEX l_lines
+*        INTO l_st_contact.
+**   Name
+*      CONCATENATE l_st_contact-namev
+*                  l_st_contact-name1
+*        INTO gv_name SEPARATED BY space.
+**   E-mail
+*read table it_provider_email into ls_provider_mail with key
+*vblnr = wa_address-vblnr
+*zbukr = wa_address-zbukr
+*lifnr = wa_address-lifnr
+*mail_to_ap = abap_false.
+*if sy-subrc = 0.
+*gv_mail = ls_provider_mail-intad.
+*endif.
+*ENDIF.
+
+  DATA(lt_reguhp_aux) = it_reguhp[].
+  LOOP AT lt_reguhp_aux INTO DATA(ls_reguhp) WHERE vblnr = p_reguhp-vblnr
+                                             AND   lifnr = p_reguhp-lifnr
+                                             AND   zbukr = p_reguhp-zbukr.
+    lt_mails_bukrs = CORRESPONDING #( ls_reguhp ).
+    APPEND lt_mails_bukrs.
+  ENDLOOP.
+
+
+
+  LOOP AT lt_mails_bukrs.
+
+    SELECT namev name1 prsnr
+           INTO CORRESPONDING FIELDS OF TABLE l_it_persnum
+           FROM knvk
+           WHERE abtnr EQ lt_mails_bukrs-bukrs
+             AND pafkt EQ '23'
+             AND lifnr EQ p_reguhp-lifnr.
+
+    SORT l_it_persnum.
+    DELETE ADJACENT DUPLICATES FROM l_it_persnum.
+    DESCRIBE TABLE l_it_persnum LINES l_lines.
+    READ TABLE l_it_persnum INDEX 1
+      INTO l_st_persnum.
+    lt_mails_bukrs-name = l_st_persnum-namev && | | && l_st_persnum-name1.
+    MODIFY lt_mails_bukrs.
+
+    IF l_lines            EQ 1 AND
+       l_st_persnum-prsnr IS NOT INITIAL.
+
+      REFRESH: l_it_smtp_addr.
+
+      SELECT smtp_addr
+        INTO TABLE l_it_smtp_addr
+        FROM adr6
+        WHERE persnumber EQ l_st_persnum-prsnr.
+
+      SORT l_it_smtp_addr.
+      DELETE ADJACENT DUPLICATES FROM l_it_smtp_addr.
+      DESCRIBE TABLE l_it_smtp_addr LINES l_lines.
+
+      IF l_lines EQ 1.
+
+        READ TABLE l_it_smtp_addr INDEX l_lines
+          INTO l_stmp_addr.
+        lt_mails_bukrs-intad = l_stmp_addr.
+        MODIFY lt_mails_bukrs.
+
+      ENDIF.
+
+    ENDIF.
+
+  ENDLOOP.
+
+
+  "If US17 Exists we only work with this Company code.
+  IF line_exists( lt_mails_bukrs[ bukrs = 'US17'] ).
+    DELETE lt_mails_bukrs WHERE bukrs <> 'US17'.
+  ENDIF.
+
+
+
+  SORT lt_mails_bukrs BY dmbtr ASCENDING.
+  CLEAR ls_mails_bukrs_only_one.
+
+  LOOP AT lt_mails_bukrs.
+    IF lt_mails_bukrs-intad IS NOT INITIAL AND lt_mails_bukrs-name IS NOT INITIAL.
+      ls_mails_bukrs_only_one = lt_mails_bukrs.
+      EXIT.
+    ENDIF.
+  ENDLOOP.
+  IF ls_mails_bukrs_only_one IS INITIAL.
+    LOOP AT lt_mails_bukrs.
+      IF  lt_mails_bukrs-name IS NOT INITIAL.
+        ls_mails_bukrs_only_one = lt_mails_bukrs.
+        EXIT.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+
+
+
+  CLEAR: p_has_email,
+         ls_provider_email.
+*-------------------------------------------------------
+*-------------------------------------------------------
+*-------------------------------------------------------
+*-------------------------------------------------------
+  "Global validation
+  READ TABLE pt_provider_email INTO ls_provider_email
+    WITH KEY zbukr = p_reguhp-zbukr
+             lifnr = p_reguhp-lifnr
+             vblnr = p_reguhp-vblnr.
+  IF sy-subrc NE 0.
+
+
+* Only for employes
+    SELECT SINGLE smtp_addr name1 INTO (ls_provider_email-intad, ls_provider_email-name)
+      FROM lfa1 AS l INNER JOIN adr6 AS a
+        ON l~adrnr EQ a~addrnumber
+      WHERE lifnr EQ p_reguhp-lifnr
+        AND ktokk EQ 'EMPL'.
+
+
+*SELECT SINGLE smtp_addr name1 INTO (gv_mail, gv_name)
+*  FROM lfa1 AS l INNER JOIN adr6 AS a
+*    ON l~adrnr EQ a~addrnumber
+*  WHERE lifnr EQ wa_address-lifnr
+*    AND ktokk EQ 'EMPL'.
+
+
+
+
+    IF sy-subrc = 0.
+
+      CLEAR: ls_provider_email.
+      ls_provider_email-zbukr = p_reguhp-zbukr.
+      ls_provider_email-vblnr = p_reguhp-vblnr.
+      ls_provider_email-lifnr = p_reguhp-lifnr.
+*      ls_provider_email-intad = l_empl_mail.
+      APPEND ls_provider_email TO pt_provider_email.
+      p_has_email = 'X'.
+
+    ELSE."Not an employee
+
+      IF ls_mails_bukrs_only_one-intad IS NOT INITIAL.
+        CLEAR: ls_provider_email.
+        ls_provider_email-zbukr = p_reguhp-zbukr.
+        ls_provider_email-vblnr = p_reguhp-vblnr.
+        ls_provider_email-lifnr = p_reguhp-lifnr.
+        ls_provider_email-intad = ls_mails_bukrs_only_one-intad.
+        ls_provider_email-name = ls_mails_bukrs_only_one-name.
+        APPEND ls_provider_email TO pt_provider_email.
+        p_has_email = 'X'.
+      ENDIF.
+    ENDIF.
+
+*      ENDIF.
+
+    IF p_has_email IS INITIAL.
+
+      CLEAR: l_stmp_addr.
+
+      SELECT SINGLE smtp_addr
+        INTO l_stmp_addr
+        FROM yfiap0004
+        WHERE bukrs EQ p_reguhp-zbukr.
+
+      PERFORM check_valid_email USING    l_stmp_addr
+                                CHANGING l_is_valid.
+
+      IF l_is_valid IS NOT INITIAL.
+
+        CLEAR: ls_provider_email.
+        ls_provider_email-zbukr = p_reguhp-zbukr.
+        ls_provider_email-vblnr = p_reguhp-vblnr.
+        ls_provider_email-lifnr = p_reguhp-lifnr.
+        ls_provider_email-intad = l_stmp_addr.
+        ls_provider_email-name = ls_mails_bukrs_only_one-name.
+        ls_provider_email-mail_to_ap = abap_true.
+        APPEND ls_provider_email TO pt_provider_email.
+        p_has_email = 'X'.
+
+      ENDIF.
+
+    ENDIF.
+
+*    ENDIF.
+
+  ELSE.
+    p_has_email = 'X'.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  CHECK_VALID_EMAIL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_INTAD  text
+*      <--P_IS_VALID  text
+*----------------------------------------------------------------------*
+FORM check_valid_email USING    p_intad
+                       CHANGING p_is_valid.
+
+  CONSTANTS:
+    l_regex TYPE char255 VALUE '^[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+(?:[A-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$'.
+
+  DATA:
+    l_intad  TYPE string,
+    l_result TYPE i.
+
+  CLEAR: p_is_valid,
+         l_intad,
+         l_result.
+
+  l_intad = p_intad.
+
+  FIND ALL OCCURRENCES OF REGEX l_regex
+    IN l_intad IN CHARACTER MODE
+    IGNORING CASE MATCH COUNT l_result.
+
+  IF l_result EQ 1.
+    p_is_valid = 'X'.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  PROCESS_PAYMENTS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM process_payments.
+
+  DATA:
+    l_fname             TYPE rs38l_fnam,
+    ls_cntrl_param      TYPE ssfctrlop,
+    ls_output_options   TYPE ssfcompop,
+    ls_job_info         TYPE ssfcrescl,
+    l_form              TYPE tdsfname,
+    l_desc              TYPE tdtext,
+    l_tabix             TYPE i,
+    l_lines             TYPE i,
+    lt_reguhp_provider  TYPE tt_zfigl0001   WITH HEADER LINE,
+    ls_reguhp_email     TYPE zfigl0001,
+    lt_address_provider TYPE TABLE OF reguh,
+    lt_vblnr_provider   TYPE TABLE OF reguh WITH HEADER LINE,
+    l_s_address         TYPE reguh,
+    ls_provider_email   TYPE yfiap_remitt_adv_mail,
+    l_sent              TYPE abap_bool,
+    l_message           TYPE string.
+
+  CHECK gv_lock IS NOT INITIAL.
+
+  IF wa_t042e-wforn IS INITIAL.
+    l_form = wa_t042e-zforn.
+  ELSE.
+    l_form = wa_t042e-wforn.
+  ENDIF.
+
+  SELECT SINGLE caption INTO l_desc
+    FROM stxfadmt
+    WHERE langu     = sy-langu
+    AND   formname  = l_form.
+
+  CONCATENATE text-l01 l_form '-' l_desc
+    INTO l_message
+    SEPARATED BY space.
+
+  PERFORM add_string_message USING g_log_handle
+                                   'S'
+                                   l_message.
+
+  IF l_form IS NOT INITIAL AND
+     ( it_reguhp_email[] IS NOT INITIAL OR
+       it_reguh[]        IS NOT INITIAL ).
+
+    CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+      EXPORTING
+        formname           = l_form
+      IMPORTING
+        fm_name            = l_fname
+      EXCEPTIONS
+        no_form            = 1
+        no_function_module = 2
+        OTHERS             = 3.
+
+    IF p_email IS NOT INITIAL.
+
+      LOOP AT it_reguhp_email.
+
+        ls_reguhp_email = it_reguhp_email.
+
+        AT FIRST.
+
+          CLEAR: l_message.
+          l_message = text-l02.
+
+          PERFORM add_string_message USING g_log_handle
+                                           'S'
+                                           l_message.
+
+        ENDAT.
+
+        AT NEW lifnr.
+          REFRESH: lt_reguhp_provider,
+                   lt_vblnr_provider,
+                   lt_address_provider.
+        ENDAT.
+
+        APPEND ls_reguhp_email TO lt_reguhp_provider.
+
+        READ TABLE it_vblnr_email WITH KEY vblnr = ls_reguhp_email-vblnr.
+
+        IF sy-subrc = 0.
+
+          l_tabix = sy-tabix.
+          APPEND it_vblnr_email TO lt_vblnr_provider.
+          DELETE it_vblnr_email INDEX l_tabix.
+
+        ENDIF.
+
+        CLEAR l_s_address.
+        READ TABLE it_address_email WITH KEY lifnr  = ls_reguhp_email-lifnr
+                                             vblnr = ls_reguhp_email-vblnr
+          INTO l_s_address.
+
+        IF sy-subrc = 0.
+
+          l_tabix = sy-tabix.
+          APPEND l_s_address TO lt_address_provider.
+          DELETE it_address_email INDEX l_tabix.
+
+        ENDIF.
+
+        AT END OF lifnr.
+
+          CLEAR ls_provider_email.
+          READ TABLE it_provider_email INTO ls_provider_email
+            WITH KEY zbukr  = ls_reguhp_email-zbukr
+                     vblnr  = ls_reguhp_email-vblnr
+                     lifnr  = ls_reguhp_email-lifnr.
+
+          CLEAR: l_message.
+          CONCATENATE text-l04 ls_provider_email-lifnr ls_provider_email-name
+            INTO l_message
+            SEPARATED BY space.
+
+          PERFORM add_string_message USING g_log_handle
+                                           'S'
+                                           l_message.
+
+          PERFORM send_email_payment USING   l_fname
+                                             ls_provider_email
+                                             lt_reguhp_provider[]
+                                             lt_vblnr_provider[]
+                                             lt_address_provider[]
+                                    CHANGING l_sent.
+
+          IF l_sent IS INITIAL.
+
+            APPEND LINES OF lt_reguhp_provider  TO it_reguhp.
+            APPEND LINES OF lt_vblnr_provider   TO it_vblnr.
+            APPEND LINES OF lt_address_provider TO it_address.
+
+            CLEAR: l_message.
+            l_message = text-l05.
+
+            PERFORM add_string_message USING g_log_handle
+                                             'W'
+                                             l_message.
+
+          ELSE.
+
+            CLEAR: l_message.
+            CONCATENATE text-l06 ls_provider_email-lifnr ls_provider_email-intad
+              INTO l_message
+              SEPARATED BY space.
+
+            PERFORM add_string_message USING g_log_handle
+                                             'S'
+                                             l_message.
+
+          ENDIF.
+
+        ENDAT.
+
+        AT LAST.
+
+          CLEAR: l_message.
+          l_message = text-l03.
+
+          PERFORM add_string_message USING g_log_handle
+                                           'S'
+                                           l_message.
+
+        ENDAT.
+
+      ENDLOOP.
+
+    ENDIF.
+
+    IF it_reguhp[] IS NOT INITIAL.
+
+      CLEAR: l_message.
+      l_message = text-l07.
+
+      PERFORM add_string_message USING g_log_handle
+                                       'S'
+                                       l_message.
+
+      CLEAR ls_cntrl_param-getotf.
+
+*     If email checbox is not selected the program executes Smartform function to print the whole payment,
+*     otherwise the program executes Smartform function to print the payments for providers without email address
+
+      CLEAR: ls_output_options,
+             ls_cntrl_param,
+             l_lines.
+      ls_output_options-tddest  = p_fordp. " Output Device
+      ls_output_options-tdimmed = p_fords. " Print immediately
+      ls_output_options-tdnewid = 'X'.     " Orden SPOOL nueva
+      ls_output_options-tdfinal = 'X'.     " Cerar SPOOL
+
+*     Número de vendedores
+      DESCRIBE TABLE it_vblnr LINES l_lines.
+      SORT it_reguhp BY lifnr.
+      CLEAR l_message.
+
+      TRY.
+          CALL FUNCTION l_fname
+            EXPORTING
+              control_parameters = ls_cntrl_param
+              output_options     = ls_output_options
+              user_settings      = space
+              gv_lines           = l_lines
+            IMPORTING
+              job_output_info    = ls_job_info
+            TABLES
+              it_items           = it_reguhp
+              it_vblnr           = it_vblnr
+              it_address         = it_address
+              it_provider_email  = it_provider_email
+            EXCEPTIONS
+              formatting_error   = 1
+              internal_error     = 2
+              send_error         = 3
+              user_canceled      = 4
+              OTHERS             = 5.
+
+        CATCH cx_root.
+          l_message = text-008.
+          PERFORM add_string_message USING g_log_handle
+                                           'E'
+                                           l_message.
+          sy-subrc = 5.
+      ENDTRY.
+
+
+
+      IF sy-subrc NE 0.
+        IF l_message IS INITIAL.
+          PERFORM add_message USING g_log_handle
+                                    sy-msgty
+                                    sy-msgid
+                                    sy-msgno
+                                    sy-msgv1
+                                    sy-msgv2
+                                    sy-msgv3
+                                    sy-msgv4.
+        ENDIF.
+      ELSE.
+
+        CLEAR: l_message.
+        l_message = text-l08.
+
+        PERFORM add_string_message USING g_log_handle
+                                         'S'
+                                         l_message.
+      ENDIF.
+
+    ENDIF.
+
+  ELSE.
+    MESSAGE s001 WITH text-001.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  SEND_EMAIL_PAYMENT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_FNAME            text
+*      -->PS_PROVIDER_EMAIL  text
+*      -->PT_REGUHP          text
+*      -->PT_VBLNR           text
+*      -->PT_ADDRESS         text
+*      <--P_SENT             text
+*----------------------------------------------------------------------*
+FORM send_email_payment USING    p_fname
+                                 ps_provider_email TYPE yfiap_remitt_adv_mail
+                                 pt_reguhp         TYPE tt_zfigl0001
+                                 pt_vblnr          TYPE fi_t_reguh
+                                 pt_address        TYPE fi_t_reguh
+                        CHANGING p_sent.
+
+  DATA:
+    l_message         TYPE string,
+    ls_cntrl_param    TYPE ssfctrlop,
+    ls_output_options TYPE ssfcompop,
+    l_devtype         TYPE rspoptype,
+    ls_job_info       TYPE ssfcrescl,
+    l_lines           TYPE i,
+    l_bin_filesize    TYPE i,
+    l_bin_file        TYPE xstring,
+    lt_docs           TYPE /ixos/bf_tt_docs,
+    lt_lines          TYPE tline_t,
+    ls_reguhp         TYPE zfigl0001,
+    lt_provider_mail  TYPE yfiap_remitt_adv_mail_tt.
+
+
+  CLEAR: l_message,
+         l_lines,
+         ls_output_options,
+         ls_cntrl_param,
+         l_devtype,
+         p_sent.
+
+  REFRESH: lt_docs,
+           lt_lines,
+           lt_provider_mail.
+
+  CALL FUNCTION 'SSF_GET_DEVICE_TYPE'
+    EXPORTING
+      i_language             = sy-langu
+      i_application          = 'SAPDEFAULT'
+    IMPORTING
+      e_devtype              = l_devtype
+    EXCEPTIONS
+      no_language            = 1
+      language_not_installed = 2
+      no_devtype_found       = 3
+      system_error           = 4
+      OTHERS                 = 5.
+
+  IF sy-subrc NE 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  DESCRIBE TABLE pt_vblnr LINES l_lines.
+
+  ls_output_options-tdprinter = l_devtype. " Output Device
+  ls_cntrl_param-no_dialog    = 'X'.
+  ls_cntrl_param-getotf       = 'X'.
+
+  APPEND ps_provider_email TO lt_provider_mail.
+
+
+* Execute Smartform function to generate PDF for email attachment
+  TRY.
+      CALL FUNCTION p_fname
+        EXPORTING
+          control_parameters = ls_cntrl_param
+          output_options     = ls_output_options
+          user_settings      = space
+          gv_lines           = l_lines
+        IMPORTING
+          job_output_info    = ls_job_info
+        TABLES
+          it_items           = pt_reguhp
+          it_vblnr           = pt_vblnr
+          it_address         = pt_address
+          it_provider_email  = lt_provider_mail
+        EXCEPTIONS
+          formatting_error   = 1
+          internal_error     = 2
+          send_error         = 3
+          user_canceled      = 4
+          OTHERS             = 5.
+
+    CATCH cx_root.
+      l_message = text-008.
+      PERFORM add_string_message USING g_log_handle
+                                       'E'
+                                       l_message.
+  ENDTRY.
+
+  CHECK l_message IS INITIAL.
+
+  CALL FUNCTION 'CONVERT_OTF'
+    EXPORTING
+      format                = 'PDF'
+      max_linewidth         = 132
+    IMPORTING
+      bin_filesize          = l_bin_filesize
+      bin_file              = l_bin_file
+    TABLES
+      otf                   = ls_job_info-otfdata
+      lines                 = lt_lines
+    EXCEPTIONS
+      err_max_linewidth     = 1
+      err_format            = 2
+      err_conv_not_possible = 3
+      err_bad_otf           = 4
+      OTHERS                = 5.
+
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  CLEAR: ls_reguhp.
+  READ TABLE pt_reguhp INDEX 1
+    INTO ls_reguhp.
+
+  PERFORM send_email USING    ps_provider_email
+                              l_bin_file
+                              l_bin_filesize
+                              ls_reguhp-vblnr
+                     CHANGING p_sent.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  SEND_EMAIL
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->PS_PROVIDER_EMAIL  text
+*      -->P_BIN_FILE         text
+*      -->P_BIN_FILESIZE     text
+*      -->P_VBLNR            text
+*      <--P_SENT             text
+*----------------------------------------------------------------------*
+FORM send_email USING    ps_provider_email TYPE yfiap_remitt_adv_mail
+                         p_bin_file
+                         p_bin_filesize
+                         p_vblnr
+                CHANGING p_sent.
+
+  DATA:
+    lr_send_request      TYPE REF TO cl_bcs,
+    lr_document          TYPE REF TO cl_document_bcs,
+    lr_sender            TYPE REF TO cl_sapuser_bcs,
+    lr_recipient         TYPE REF TO if_recipient_bcs,
+    lr_bcs_exception     TYPE REF TO cx_bcs,
+    lt_html              TYPE soli_tab,
+    l_subject            TYPE string,
+    l_subject_body       TYPE so_obj_des,
+    l_subject_attachment TYPE so_obj_des,
+    lt_attachment_pdf    TYPE solix_tab,
+    l_smtp_addr          TYPE ad_smtpadr,
+    l_result             TYPE os_boolean,
+    l_error_message      TYPE string,
+    l_company_name       TYPE butxt.
+
+  CLEAR p_sent.
+
+  TRY.
+*   Create persistent send request
+      lr_send_request = cl_bcs=>create_persistent( ).
+
+*   Generete subtect
+      CLEAR l_subject.
+
+      SELECT SINGLE butxt
+        INTO l_company_name
+        FROM t001
+        WHERE bukrs = ps_provider_email-zbukr.
+
+      CONCATENATE l_company_name
+                  text-s01
+                  p_vblnr
+        INTO l_subject SEPARATED BY space.
+      l_subject_body = l_subject.
+
+*   Generete email body
+      PERFORM buld_email_body CHANGING lt_html.
+
+      lr_document = cl_document_bcs=>create_document(
+                     i_type       = 'HTM'
+                     i_importance = '5'
+                     i_text       = lt_html
+                     i_subject    = l_subject_body ).
+
+      IF lr_document IS BOUND.
+*     Attachment
+        PERFORM generete_attachment USING    p_bin_file
+                                             p_bin_filesize
+                                    CHANGING lt_attachment_pdf.
+
+        CLEAR l_subject_attachment.
+        CONCATENATE ps_provider_email-zbukr   '_'
+                    ps_provider_email-lifnr   '.pdf'
+          INTO l_subject_attachment.
+
+        CALL METHOD lr_document->add_attachment
+          EXPORTING
+            i_attachment_type    = 'PDF'
+            i_attachment_subject = l_subject_attachment
+            i_att_content_hex    = lt_attachment_pdf.
+
+      ELSE.
+        EXIT.
+      ENDIF.
+
+*   Add document to send request
+      CALL METHOD lr_send_request->set_document( lr_document ).
+
+*   Get sender object
+      lr_sender = cl_sapuser_bcs=>create( sy-uname ).
+
+*   Add sender
+      CALL METHOD lr_send_request->set_sender
+        EXPORTING
+          i_sender = lr_sender.
+
+*   Create recipient
+      CLEAR l_smtp_addr.
+      l_smtp_addr = ps_provider_email-intad.
+      lr_recipient = cl_cam_address_bcs=>create_internet_address( l_smtp_addr ).
+
+*   Add recipient to send request
+      CALL METHOD lr_send_request->add_recipient
+        EXPORTING
+          i_recipient = lr_recipient.
+
+*   Add subject to send request
+      CALL METHOD lr_send_request->set_message_subject( l_subject ).
+
+*  Set send immediately flag
+      lr_send_request->set_send_immediately( 'X' ).
+
+*   Send document
+      l_result =  lr_send_request->send( ).
+
+      IF l_result IS NOT INITIAL.
+
+        COMMIT WORK.
+        p_sent = 'X'.
+
+      ELSE.
+
+      ENDIF.
+
+    CATCH cx_bcs INTO lr_bcs_exception.
+
+      l_error_message = lr_bcs_exception->get_longtext( ).
+      PERFORM add_string_message USING g_log_handle
+                                       'E'
+                                       l_error_message.
+
+  ENDTRY.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  GENERETE_ATTACHMENT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_BIN_FILE         text
+*      <--PT_ATTACHMENT_PDF  text
+*----------------------------------------------------------------------*
+FORM generete_attachment USING    p_bin_file
+                                  p_bin_filesize
+                         CHANGING pt_attachment_pdf TYPE solix_tab.
+
+  DATA:
+    l_length             TYPE i,
+    l_offset             TYPE i,
+    l_remaining_filesize TYPE i,
+    ls_attachment_pdf    TYPE solix.
+
+  CLEAR: l_length,
+         l_offset.
+  REFRESH pt_attachment_pdf.
+  DESCRIBE FIELD ls_attachment_pdf LENGTH l_length IN BYTE MODE.
+  l_remaining_filesize = p_bin_filesize.
+
+  DO.
+
+    CLEAR ls_attachment_pdf.
+
+    IF l_remaining_filesize LE l_length.
+
+      ls_attachment_pdf-line = p_bin_file+l_offset(l_remaining_filesize).
+      APPEND ls_attachment_pdf TO pt_attachment_pdf.
+      EXIT.
+
+    ELSE.
+
+      ls_attachment_pdf-line = p_bin_file+l_offset(l_length).
+      APPEND ls_attachment_pdf TO pt_attachment_pdf.
+      l_offset             = l_offset + l_length.
+      l_remaining_filesize = l_remaining_filesize - l_length.
+
+    ENDIF.
+
+  ENDDO.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  INITIALIZE_LOG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--PS_LOG_HANDLE  text
+*----------------------------------------------------------------------*
+FORM initialize_log CHANGING p_log_handle.
+
+  DATA: ls_log       TYPE bal_s_log,
+        l_ext_number TYPE balnrext.
+
+* define header data for the log
+  CLEAR: p_log_handle,
+         l_ext_number,
+         ls_log.
+
+  CONCATENATE sy-datum sy-uzeit
+         INTO l_ext_number
+    SEPARATED BY space.
+
+  ls_log-extnumber = l_ext_number.
+  ls_log-aluser    = sy-uname.
+  ls_log-alprog    = sy-repid.
+
+* create a log
+  CALL FUNCTION 'BAL_LOG_CREATE'
+    EXPORTING
+      i_s_log                 = ls_log
+    IMPORTING
+      e_log_handle            = p_log_handle
+    EXCEPTIONS
+      log_header_inconsistent = 1
+      OTHERS                  = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+     WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  ADD_STRING_MESSAGE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->PS_LOG_HANDLE  text
+*      -->P_TYPE         text
+*      -->P_MESSAGE      text
+*----------------------------------------------------------------------*
+FORM add_string_message USING ps_log_handle
+                              p_type
+                              p_message.
+
+  DATA:
+    ls_msg           TYPE bal_s_msg,
+    l_message_length TYPE i,
+    l_offset         TYPE i,
+    l_remaining      TYPE i,
+    l_index_char     TYPE char1,
+    l_index          TYPE int4,
+    l_name           TYPE string.
+
+  FIELD-SYMBOLS:
+    <l_comp> TYPE any.
+
+  CLEAR: l_index,
+         l_index_char,
+         l_message_length,
+         l_offset,
+         ls_msg.
+
+  ls_msg-msgty = p_type.
+  ls_msg-msgid = '00'.
+  ls_msg-msgno = '001'.
+  l_message_length = strlen( p_message ).
+  l_remaining      = l_message_length.
+
+  DO.
+
+    l_index      = l_index + 1.
+    l_index_char = l_index.
+    CLEAR: l_name.
+    CONCATENATE 'MSGV' l_index_char
+      INTO l_name.
+
+    ASSIGN COMPONENT l_name OF STRUCTURE ls_msg TO <l_comp>.
+
+    IF <l_comp> IS ASSIGNED.
+
+      IF l_remaining LE 50.
+
+        <l_comp> = p_message+l_offset(l_remaining).
+        EXIT.
+
+      ELSE.
+
+        <l_comp>    = p_message+l_offset(50).
+        l_offset    = l_offset + 50.
+        l_remaining = l_remaining - 50.
+
+      ENDIF.
+
+    ELSE.
+      EXIT.
+    ENDIF.
+
+  ENDDO.
+
+  CALL FUNCTION 'BAL_LOG_MSG_ADD'
+    EXPORTING
+      i_log_handle     = ps_log_handle
+      i_s_msg          = ls_msg
+    EXCEPTIONS
+      log_not_found    = 1
+      msg_inconsistent = 2
+      log_is_full      = 3
+      OTHERS           = 4.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+     WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  ADD_MESSAGE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->PS_LOG_HANDLE  text
+*      -->P_TYPE         text
+*      -->P_ID           text
+*      -->P_NUMBER       text
+*      -->P_VAR1         text
+*      -->P_VAR2         text
+*      -->P_VAR3         text
+*      -->P_VAR4         text
+*----------------------------------------------------------------------*
+FORM add_message USING ps_log_handle
+                       p_type
+                       p_id
+                       p_number
+                       p_var1
+                       p_var2
+                       p_var3
+                       p_var4.
+
+  DATA:
+    ls_msg TYPE bal_s_msg.
+
+  CLEAR: ls_msg.
+  ls_msg-msgty = p_type.
+  ls_msg-msgid = p_id.
+  ls_msg-msgno = p_number.
+  ls_msg-msgv1 = p_var1.
+  ls_msg-msgv2 = p_var2.
+  ls_msg-msgv3 = p_var3.
+  ls_msg-msgv4 = p_var4.
+
+  CALL FUNCTION 'BAL_LOG_MSG_ADD'
+    EXPORTING
+      i_log_handle     = ps_log_handle
+      i_s_msg          = ls_msg
+    EXCEPTIONS
+      log_not_found    = 1
+      msg_inconsistent = 2
+      log_is_full      = 3
+      OTHERS           = 4.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+     WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  DISPLAY_LOG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LOG_HANDLE  text
+*----------------------------------------------------------------------*
+FORM display_log USING p_log_handle.
+
+  DATA:
+    ls_display_profile TYPE bal_s_prof.
+
+  CLEAR: ls_display_profile.
+
+* get display profile
+  CALL FUNCTION 'BAL_DSP_PROFILE_NO_TREE_GET'
+    IMPORTING
+      e_s_display_profile = ls_display_profile
+    EXCEPTIONS
+      OTHERS              = 1.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+* build display profile
+  ls_display_profile-use_grid          = 'X'.
+  ls_display_profile-disvariant-report = sy-repid.
+  ls_display_profile-disvariant-handle = 'LOG'.
+
+* call display function module
+  CALL FUNCTION 'BAL_DSP_LOG_DISPLAY'
+    EXPORTING
+      i_s_display_profile  = ls_display_profile
+    EXCEPTIONS
+      profile_inconsistent = 1
+      internal_error       = 2
+      no_data_available    = 3
+      no_authority         = 4
+      OTHERS               = 1.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  BULD_EMAIL_BODY
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--PT_HTML  text
+*----------------------------------------------------------------------*
+FORM buld_email_body CHANGING pt_html TYPE soli_tab.
+
+  CONSTANTS:
+    lc_extended_line TYPE tdformat VALUE '= '.
+
+  DATA:
+    l_html   TYPE soli,
+    l_name   TYPE tdobname,
+    lt_lines TYPE tline_t,
+    ls_lines TYPE tline,
+    l_line   TYPE string,
+    l_length TYPE i,
+    l_init   TYPE abap_bool.
+
+  l_name = text-b01.
+
+  CALL FUNCTION 'READ_TEXT'
+    EXPORTING
+      id                      = 'ST'
+      language                = sy-langu
+      name                    = l_name
+      object                  = 'TEXT'
+    TABLES
+      lines                   = lt_lines
+    EXCEPTIONS
+      id                      = 1
+      language                = 2
+      name                    = 3
+      not_found               = 4
+      object                  = 5
+      reference_check         = 6
+      wrong_access_to_archive = 7
+      OTHERS                  = 8.
+
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+  REFRESH pt_html.
+
+  CLEAR l_html.
+  l_html = '<html>'.
+  APPEND l_html TO pt_html.
+
+  CLEAR l_html.
+  l_html = '<body>'.
+  APPEND l_html TO pt_html.
+
+  CLEAR: l_line.
+  l_init = 'X'.
+
+  LOOP AT lt_lines INTO ls_lines.
+
+    IF l_init IS NOT INITIAL.
+      CLEAR l_init.
+    ELSE.
+
+      IF ls_lines-tdformat NE lc_extended_line.
+
+        IF l_length IS NOT INITIAL.
+
+          CLEAR l_html.
+          CONCATENATE '<text>'
+                      l_line
+                     '</text>'
+            INTO l_html.
+          APPEND l_html TO pt_html.
+
+        ELSE.
+
+          CLEAR l_html.
+          l_html = '<br><br>'.
+          APPEND l_html TO pt_html.
+
+        ENDIF.
+
+        CLEAR: l_line.
+
+      ENDIF.
+
+    ENDIF.
+
+    IF ls_lines-tdline IS NOT INITIAL.
+      CONCATENATE l_line ls_lines-tdline INTO l_line
+        SEPARATED BY space.
+    ENDIF.
+
+    CLEAR: l_length.
+    l_length = strlen( l_line ).
+
+  ENDLOOP.
+
+  IF l_length IS NOT INITIAL.
+
+    CLEAR l_html.
+    CONCATENATE '<text>'
+                l_line
+               '</text>'
+      INTO l_html.
+    APPEND l_html TO pt_html.
+
+  ELSE.
+
+    CLEAR l_html.
+    l_html = '<br><br>'.
+    APPEND l_html TO pt_html.
+
+  ENDIF.
+
+  CLEAR l_html.
+  l_html = '</body>'.
+  APPEND l_html TO pt_html.
+
+  CLEAR l_html.
+  l_html = '</html>'.
+  APPEND l_html TO pt_html.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  F_GET_LAUFI
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_LAUFD  text
+*      <--P_LAUFI  text
+*----------------------------------------------------------------------*
+FORM f_get_laufi CHANGING p_laufd TYPE laufd
+                          p_laufi TYPE laufi.
+
+  DATA:
+    l_it_tlaufk        TYPE TABLE OF ilaufk,
+    l_st_tlaufk        TYPE ilaufk,
+    l_nothing_selected TYPE c.
+
+  CLEAR: l_nothing_selected.
+  REFRESH: l_it_tlaufk.
+  CLEAR: l_st_tlaufk.
+  l_st_tlaufk-laufk = space.
+  l_st_tlaufk-sign  = 'I'.
+  APPEND l_st_tlaufk TO l_it_tlaufk.
+
+  CALL FUNCTION 'F4_ZAHLLAUF'
+    EXPORTING
+      f1typ            = 'I'
+      f2nme            = 'ZW_LAUFD'
+    IMPORTING
+      laufd            = p_laufd
+      laufi            = p_laufi
+      nothing_selected = l_nothing_selected
+    TABLES
+      laufk            = l_it_tlaufk.
+
+ENDFORM.
+
+*&---------------------------------------------------------------------*
+*&      Form  F_GET_LAUFD
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--P_LAUFD  text
+*      <--P_LAUFI  text
+*----------------------------------------------------------------------*
+FORM f_get_laufd CHANGING p_laufd TYPE laufd
+                          p_laufi TYPE laufi.
+
+  DATA:
+    l_it_tlaufk        TYPE TABLE OF ilaufk,
+    l_st_tlaufk        TYPE ilaufk,
+    l_nothing_selected TYPE c.
+
+  CLEAR: l_nothing_selected.
+  REFRESH l_it_tlaufk.
+  CLEAR: l_st_tlaufk.
+  l_st_tlaufk-laufk = space.
+  l_st_tlaufk-sign  = 'I'.
+  APPEND l_st_tlaufk TO l_it_tlaufk.
+
+  CALL FUNCTION 'F4_ZAHLLAUF'
+    EXPORTING
+      f1typ            = 'D'
+      f2nme            = 'ZW_LAUFI'
+    IMPORTING
+      laufd            = p_laufd
+      laufi            = p_laufi
+      nothing_selected = l_nothing_selected
+    TABLES
+      laufk            = l_it_tlaufk.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  AUTHORITY_CHECK
+*&---------------------------------------------------------------------*
+FORM authority_check .
+
+
+
+
+ENDFORM.
