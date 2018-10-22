@@ -1,0 +1,75 @@
+*&---------------------------------------------------------------------*
+*&  Include           YFIAPR0007_TOP                                   *
+*&---------------------------------------------------------------------*
+
+REPORT  yfiapr0002 MESSAGE-ID 00.
+
+TYPE-POOLS:
+  abap.
+
+TYPES:
+
+  tt_zfigl0001      TYPE TABLE OF zfigl0001.
+
+TABLES:
+  bkpf,
+  lfa1,
+  reguh,
+  regup,
+  rfpdo,
+  rfpdo1.
+
+DATA:
+  gv_lock           TYPE abap_bool,
+  it_reguh          TYPE fi_t_reguh   WITH HEADER LINE,
+  it_regup          TYPE fi_t_regup   WITH HEADER LINE,
+  it_reguhp         TYPE tt_zfigl0001 WITH HEADER LINE,
+  it_reguhp_email   TYPE tt_zfigl0001 WITH HEADER LINE,
+  it_address        TYPE fi_t_reguh,
+  it_address_email  TYPE fi_t_reguh,
+  it_vblnr          TYPE fi_t_reguh   WITH HEADER LINE,
+  it_vblnr_email    TYPE fi_t_reguh   WITH HEADER LINE,
+  wa_address        TYPE reguh,
+  wa_t042e          TYPE t042e,
+  it_provider_email TYPE yfiap_remitt_adv_mail_tt,
+  g_log_handle      TYPE balloghndl,
+  gv_not_authorized type abap_bool.
+
+*----------------------------------------------------------------------*
+* SELECTION SCREEN
+*----------------------------------------------------------------------*
+PARAMETERS: zw_laufd TYPE reguh-laufd, "OBLIGATORY,
+            zw_laufi TYPE reguh-laufi, "OBLIGATORY,
+            zw_xvorl TYPE reguh-xvorl.
+
+SELECTION-SCREEN SKIP.
+SELECT-OPTIONS: s_bukrs FOR bkpf-bukrs,
+                s_gjahr FOR bkpf-gjahr,
+                s_belnr FOR bkpf-belnr,
+                s_lifnr FOR reguh-lifnr.
+SELECTION-SCREEN SKIP.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE text-002.
+
+SELECTION-SCREEN BEGIN OF LINE.
+PARAMETERS: p_forda    TYPE rfpdo-fordavis.
+SELECTION-SCREEN: COMMENT (26) text-003 FOR FIELD p_forda,
+                  COMMENT (08) text-004 FOR FIELD p_fordp.
+PARAMETERS: p_fordp TYPE rfpdo-fordpria,
+            p_fords TYPE rfpdo1-fordsofa.
+SELECTION-SCREEN: COMMENT (18) text-005 FOR FIELD p_fords.
+SELECTION-SCREEN END OF LINE.
+
+SELECTION-SCREEN END OF BLOCK b2.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE text-006.
+PARAMETERS p_email AS CHECKBOX DEFAULT ' '.
+SELECTION-SCREEN END OF BLOCK b3.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR zw_laufd.
+  PERFORM f_get_laufd CHANGING zw_laufd
+                               zw_laufi.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR zw_laufi.
+  PERFORM f_get_laufi CHANGING zw_laufd
+                               zw_laufi.
