@@ -1,0 +1,82 @@
+*&---------------------------------------------------------------------*
+* Program:     YFIAPR0007
+* Description: FI - Payment Advice
+* Issue        -
+* Analyst:     Jesus Ordas
+* Programmer:  Itelligence - Jordi Gorrea
+* Date:        29.01.2013
+*&---------------------------------------------------------------------*
+* Change:      Adapt the program to send an e-mail to providers with
+*              valid email address. Remaining providers payments is used
+*              to generate a spool request.
+*              The status of program's execution is stored on a SAP
+* Programmer:  Itelligence - José Maria Delgado
+* Date:        06.07.2015
+*&---------------------------------------------------------------------*
+*              Copy of YFIAPR0002
+*&---------------------------------------------------------------------*
+INCLUDE yfiapr0007_top.
+INCLUDE yfiapr0007_f01.
+
+*----------------------------------------------------------------------*
+* START-OF-SELECTION
+*----------------------------------------------------------------------*
+START-OF-SELECTION.
+
+  gv_not_authorized = abap_false.
+  PERFORM initialize_log CHANGING g_log_handle.
+
+  CLEAR gv_lock.
+
+  DO 10 TIMES.
+
+    CALL FUNCTION 'ENQUEUE_EFREGUH'
+      EXPORTING
+        laufd          = zw_laufd
+        laufi          = zw_laufi
+        xvorl          = zw_xvorl
+        _wait          = 'X'
+      EXCEPTIONS
+        foreign_lock   = 1
+        system_failure = 2.
+
+    IF sy-subrc EQ 0.
+
+      gv_lock = 'X'.
+      EXIT.
+
+*    ELSE.
+*      WAIT UP TO 1 SECONDS.
+    ENDIF.
+
+  ENDDO.
+
+  IF gv_lock IS NOT INITIAL.
+
+    PERFORM select_data.
+    CHECK gv_not_authorized = abap_false.
+    PERFORM tratar_data.
+    PERFORM tratar_data_email.
+
+  ELSE.
+    MESSAGE i398 WITH text-007
+                      zw_laufd
+                      zw_laufi.
+  ENDIF.
+
+*----------------------------------------------------------------------*
+* END-OF-SELECTION
+*----------------------------------------------------------------------*
+END-OF-SELECTION.
+  CHECK gv_not_authorized = abap_false.
+  PERFORM process_payments.
+
+  CALL FUNCTION 'DEQUEUE_EFREGUH'
+    EXPORTING
+      laufd = zw_laufd
+      laufi = zw_laufi
+      xvorl = zw_xvorl.
+
+  PERFORM display_log USING g_log_handle.
+
+*
